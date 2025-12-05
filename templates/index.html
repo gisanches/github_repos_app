@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>GitHub Repos Viewer</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <link rel="stylesheet" href="/static/style.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="app-header">
+        <div class="logo-area">
+          <span class="logo-mark">{ }</span>
+          <div class="logo-text">
+            <h1>GitHub Repos Scanner</h1>
+            <p>Dark-mode dashboard to explore public repositories.</p>
+          </div>
+        </div>
+      </header>
+
+      <main class="app-main">
+        <!-- Search panel -->
+        <section class="panel panel-search">
+          <header>
+            <h2>
+              Search user
+              <span>// GitHub</span>
+            </h2>
+            <p>Type a username and we will fetch the first 5 public repositories.</p>
+          </header>
+
+          <form id="search-form" autocomplete="off">
+            <label for="username" class="sr-only">GitHub username</label>
+
+            <div class="command-bar">
+              <div class="prompt-prefix">
+                <span>➜</span> github-repos
+              </div>
+              <div class="input-wrapper">
+                <input
+                  type="text"
+                  id="username"
+                  name="username"
+                  placeholder="> torvalds"
+                  required
+                />
+                <span id="custom-cursor" class="terminal-cursor" aria-hidden="true">_</span>
+              </div>
+            </div>
+
+            <div class="form-footer">
+              <button type="submit">
+                <span class="icon">$</span>
+                <span>Fetch repos</span>
+              </button>
+              <p id="feedback" class="feedback"></p>
+            </div>
+          </form>
+        </section>
+
+        <!-- Results panel -->
+        <section id="results" class="panel panel-results hidden">
+          <h2>
+            Result
+            <code>// top 5 repos</code>
+          </h2>
+          <p id="status" class="status"></p>
+          <ul id="repo-list" class="repo-list"></ul>
+        </section>
+      </main>
+
+      <footer class="app-footer">
+        <span>Built with</span>
+        <code>FastAPI + PostgreSQL + GitHub API</code>
+      </footer>
+    </div>
+
+    <script>
+      const form = document.getElementById("search-form");
+      const usernameInput = document.getElementById("username");
+      const feedback = document.getElementById("feedback");
+      const resultsSection = document.getElementById("results");
+      const statusParagraph = document.getElementById("status");
+      const repoList = document.getElementById("repo-list");
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const username = usernameInput.value.trim();
+
+        if (!username) {
+          feedback.textContent = "Please enter a username.";
+          return;
+        }
+
+        feedback.textContent = "Querying GitHub...";
+        resultsSection.classList.add("hidden");
+        repoList.innerHTML = "";
+
+        try {
+          const response = await fetch(
+            `/api/github/${encodeURIComponent(username)}`,
+            {
+              method: "POST",
+            }
+          );
+
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            const message =
+              errorData.detail || "Error while fetching data from server.";
+            feedback.textContent = message;
+            return;
+          }
+
+          const data = await response.json();
+          feedback.textContent = "";
+          resultsSection.classList.remove("hidden");
+
+          const statusText = data.is_new
+            ? `\u{1F7E2} User "${data.username}" was created in the database.`
+            : `\u{1F504} Data for user "${data.username}" has been synchronized.`;
+
+          const badgeClass = data.is_new ? "badge-new" : "badge-updated";
+          const badgeLabel = data.is_new ? "new" : "updated";
+
+          statusParagraph.innerHTML = `
+            <span>${statusText}</span>
+            <span class="badge ${badgeClass}">status: ${badgeLabel}</span>
+          `;
+
+          if (Array.isArray(data.repositories) && data.repositories.length) {
+            for (const repo of data.repositories) {
+              const li = document.createElement("li");
+              li.className = "repo-item";
+              li.innerHTML = `
+                <h3>
+                  <a href="${repo.html_url}" target="_blank" rel="noopener noreferrer">
+                    ${repo.name}
+                  </a>
+                </h3>
+                <p class="repo-desc">${repo.description || "No description."}</p>
+                <div class="repo-meta">
+                  <span class="tag">
+                    <span class="dot"></span>
+                    ${repo.language || "unknown"}
+                  </span>
+                </div>
+              `;
+              repoList.appendChild(li);
+            }
+          } else {
+            repoList.innerHTML =
+              '<li class="empty">No repositories found for this user.</li>';
+          }
+        } catch (error) {
+          console.error(error);
+          feedback.textContent = "Unexpected error while processing the request.";
+        }
+      });
+
+      const inputEl = document.getElementById("username");
+      const cursorEl = document.getElementById("custom-cursor");
+
+      function updateCursor() {
+        const txtLength = inputEl.value.length;
+        cursorEl.style.left = `${txtLength}ch`;
+      }
+
+      inputEl.addEventListener("input", updateCursor);
+      inputEl.addEventListener("click", updateCursor);
+      inputEl.addEventListener("keyup", updateCursor);
+    </script>
+  </body>
+</html>
